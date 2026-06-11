@@ -5,16 +5,24 @@ description = "Voicebot speech-to-speech (browser + teléfono) con Strands Agent
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-    "strands-agents[bidi]>=1.0.0",
+    # strands-agents[bidi] arrastra PyAudio (requiere PortAudio del sistema);
+    # el servidor solo necesita el SDK bidi de Bedrock, así que se declara aparte
+    # y PyAudio queda en el extra "local" para el modo micrófono.
+    "strands-agents>=1.0.0",
+    "aws-sdk-bedrock-runtime>=0.0.2",
     "fastapi>=0.110",
     "uvicorn[standard]>=0.29",
     "numpy>=1.26",
 ]
 
 [project.optional-dependencies]
+local = [
+    "strands-agents[bidi]>=1.0.0",
+]
 dev = [
     "pytest>=8",
     "pytest-asyncio>=0.23",
+    "httpx>=0.27",
 ]
 
 [project.scripts]

@@ -2,7 +2,9 @@
 
 Endpoints:
   GET  /              Cliente web para llamar desde el navegador.
-  WS   /ws/browser    Audio bidireccional con el navegador.
+  GET  /ping          Health check (contrato de Bedrock AgentCore Runtime).
+  WS   /ws            Audio bidireccional (ruta del contrato de AgentCore).
+  WS   /ws/browser    Alias de /ws para despliegues self-hosted.
   POST /twilio/voice  Webhook de voz de Twilio (devuelve TwiML).
   WS   /ws/twilio     Twilio Media Streams.
 """
@@ -38,6 +40,11 @@ def create_app(service: ConversationService) -> FastAPI:
     async def index() -> FileResponse:
         return FileResponse(_STATIC_DIR / "index.html")
 
+    @app.get("/ping")
+    async def ping() -> dict[str, str]:
+        return {"status": "healthy"}
+
+    @app.websocket("/ws")
     @app.websocket("/ws/browser")
     async def ws_browser(websocket: WebSocket) -> None:
         await websocket.accept()

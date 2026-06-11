@@ -35,6 +35,8 @@ src/voicebot/
 │   └── cli.py               # Modo micrófono local
 ├── bootstrap.py             # Composition root (único punto de cableado)
 └── config.py                # Settings desde variables de entorno
+
+infra/terraform/             # IaC: despliegue en Bedrock AgentCore Runtime
 ```
 
 Principios aplicados:
@@ -100,8 +102,19 @@ espera Nova Sonic (y viceversa), y envía `clear` a Twilio cuando el usuario int
 ### 🎙️ Micrófono local
 
 ```bash
+pip install -e ".[local]"   # añade PyAudio (requiere PortAudio del sistema)
 voicebot-local
 ```
+
+## Despliegue en AWS (Bedrock AgentCore Runtime)
+
+El servidor cumple el contrato de AgentCore Runtime con streaming bidireccional:
+contenedor linux/arm64 (`Dockerfile`), puerto 8080, health check `GET /ping` y
+WebSocket en `/ws`. La infraestructura (ECR + rol IAM + runtime) está definida
+con Terraform en [`infra/terraform`](infra/README.md), donde también se explica
+el flujo de despliegue, la autenticación SigV4/Cognito del navegador y las
+opciones para el canal telefónico (Twilio no puede firmar SigV4, así que ese
+canal va self-hosted o a través de un puente).
 
 ## Tests
 
