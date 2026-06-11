@@ -1,0 +1,123 @@
+# Voicebot — speech-to-speech con Strands Agents
+
+Voicebot en Python construido con [Strands Agents](https://strandsagents.com) y
+**Amazon Nova Sonic** (Bedrock) en modo *speech-to-speech* real: el audio entra
+y sale del modelo en streaming bidireccional, sin pipeline STT → LLM → TTS.
+Soporta interrupciones (*barge-in*) y herramientas (tool use) durante la llamada.
+
+Se puede hablar con el bot por tres canales:
+
+| Canal | Entrypoint | Cómo |
+|---|---|---|
+| 🌐 Navegador | `voicebot-server` | Cliente web en `/` (WebSocket + AudioWorklet) |
+| ☎️ Teléfono | `voicebot-server` | Twilio Media Streams (`/twilio/voice` + `/ws/twilio`) |
+| 🎙️ Micrófono local | `voicebot-local` | PyAudio en tu equipo |
+
+## Arquitectura (hexagonal / ports & adapters)
+
+```
+src/voicebot/
+├── domain/                  # Núcleo: sin dependencias externas
+│   ├── audio.py             #   AudioFrame (VO), sample rates del dominio
+│   ├── events.py            #   AgentSpoke, Interrupted, TranscriptReady...
+│   └── ports.py             #   ConversationSession/Gateway, CallTransport, AudioTranscoder
+├── application/
+│   └── conversation.py      # Caso de uso: ConversationService.attend_call()
+├── adapters/                # Implementaciones de los puertos
+│   ├── strands_gateway.py   #   ConversationGateway → Strands BidiAgent + Nova Sonic
+│   ├── strands_events.py    #   Eventos Strands → eventos de dominio (puro, testable)
+│   ├── numpy_transcoder.py  #   AudioTranscoder → G.711 μ-law + remuestreo
+│   ├── browser_transport.py #   CallTransport → WebSocket del navegador
+│   ├── twilio_transport.py  #   CallTransport → Twilio Media Streams
+│   └── tools.py             #   Herramientas del agente (hora, tiempo...)
+├── entrypoints/
+│   ├── http/app.py          # FastAPI: web + Twilio (driving adapters)
+│   └── cli.py               # Modo micrófono local
+├── bootstrap.py             # Composition root (único punto de cableado)
+└── config.py                # Settings desde variables de entorno
+```
+
+Principios aplicados:
+
+- **Hexagonal**: `domain` y `application` no conocen Strands, Twilio, FastAPI ni numpy;
+  dependen solo de puertos (`Protocol`). La dirección de dependencias siempre apunta
+  hacia el dominio.
+- **SOLID**: cada adaptador tiene una única responsabilidad; los casos de uso dependen
+  de abstracciones (DIP); añadir un canal nuevo (p. ej. WebRTC o Amazon Connect) es un
+  adaptador `CallTransport` más, sin tocar el dominio (OCP).
+- **DDD**: lenguaje ubicuo en el modelo (`AudioFrame`, `AgentSpoke`, `Interrupted`,
+  `TranscriptReady`); objetos de valor inmutables con invariantes validadas.
+
+## Requisitos
+
+- Python ≥ 3.12 (lo exige `BidiNovaSonicModel` de Strands)
+- Credenciales AWS con acceso a Bedrock y al modelo `amazon.nova-sonic-v1:0`
+  (disponible en `us-east-1`, `eu-north-1` y `ap-northeast-1`)
+- Para el modo local: PortAudio (`brew install portaudio` / `apt install portaudio19-dev`)
+
+## Instalación
+
+```bash
+python -m venv .venv && source .venv/bin/activate
+pip install -e ".[dev]"
+```
+
+Configura AWS:
+
+```bash
+export AWS_ACCESS_KEY_ID=...
+export AWS_SECRET_ACCESS_KEY=...
+export VOICEBOT_REGION=us-east-1   # región de Bedrock con Nova Sonic
+```
+
+Variables opcionales: `VOICEBOT_VOICE` (voz de Nova Sonic, p. ej. `tiffany`),
+`VOICEBOT_MODEL_ID`, `VOICEBOT_SYSTEM_PROMPT`, `VOICEBOT_HOST`, `VOICEBOT_PORT`.
+
+## Uso
+
+### 🌐 Llamar desde el navegador
+
+```bash
+voicebot-server
+```
+
+Abre <http://localhost:8000>, pulsa **Llamar** y habla. El cliente web captura el
+micrófono (PCM16 a 16 kHz vía AudioWorklet), lo envía por WebSocket y reproduce la
+voz del agente (PCM16 a 24 kHz). Las interrupciones vacían el buffer de reproducción
+automáticamente. Nota: fuera de `localhost`, el navegador exige HTTPS para usar el micrófono.
+
+### ☎️ Llamar por teléfono (Twilio)
+
+1. Expón el servidor con una URL pública (por ejemplo `ngrok http 8000`).
+2. En la consola de Twilio, configura el webhook de voz de tu número:
+   `https://TU-DOMINIO/twilio/voice` (HTTP POST).
+3. Llama a tu número de Twilio.
+
+El webhook devuelve TwiML `<Connect><Stream>` apuntando a `wss://TU-DOMINIO/ws/twilio`;
+el adaptador convierte el audio G.711 μ-law a 8 kHz de la red telefónica al PCM que
+espera Nova Sonic (y viceversa), y envía `clear` a Twilio cuando el usuario interrumpe.
+
+### 🎙️ Micrófono local
+
+```bash
+voicebot-local
+```
+
+## Tests
+
+```bash
+pytest
+```
+
+Los tests son unitarios y no necesitan AWS, audio ni red: los puertos se sustituyen
+por dobles (`tests/fakes.py`). Cubren el caso de uso de conversación, el códec
+μ-law/remuestreo, los protocolos browser/Twilio y el mapeo de eventos de Strands.
+
+## Extender
+
+- **Herramientas**: añade funciones `@tool` en `adapters/tools.py` (CRM, reservas,
+  consultas a base de datos...) y regístralas en `strands_gateway.py`.
+- **Nuevo canal** (WebRTC, Amazon Connect, Telegram...): implementa `CallTransport`
+  y cablea el endpoint en `entrypoints/`.
+- **Otro modelo speech-to-speech**: implementa `ConversationGateway` (Strands también
+  trae modelos bidi de OpenAI Realtime y Gemini Live).

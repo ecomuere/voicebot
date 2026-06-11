@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Voicebot</title>
+<style>
+  :root { color-scheme: dark; }
+  body { font-family: system-ui, sans-serif; background: #10141a; color: #e8e8e8;
+         display: flex; flex-direction: column; align-items: center; min-height: 100vh;
+         margin: 0; padding: 2rem 1rem; }
+  h1 { font-weight: 600; }
+  button { font-size: 1.1rem; padding: .8rem 2.2rem; border-radius: 999px; border: 0;
+           cursor: pointer; background: #2e7d32; color: white; }
+  button.hang { background: #c62828; }
+  button:disabled { opacity: .5; cursor: default; }
+  #status { margin: 1rem 0; color: #9aa4b2; min-height: 1.2em; }
+  #transcript { width: 100%; max-width: 640px; margin-top: 1.5rem; }
+  .line { padding: .5rem .9rem; border-radius: 12px; margin: .4rem 0; max-width: 85%; }
+  .user { background: #1e3a5f; margin-left: auto; }
+  .assistant { background: #232a33; }
+  .role { font-size: .72rem; color: #9aa4b2; display: block; margin-bottom: .15rem;
+          text-transform: uppercase; letter-spacing: .05em; }
+</style>
+</head>
+<body>
+<h1>🎙️ Voicebot</h1>
+<button id="callBtn">Llamar</button>
+<div id="status">Listo</div>
+<div id="transcript"></div>
+
+<script>
+const INPUT_RATE = 16000;   // PCM16 que espera el servidor
+const OUTPUT_RATE = 24000;  // PCM16 que envía el servidor
+
+const callBtn = document.getElementById("callBtn");
+const statusEl = document.getElementById("status");
+const transcriptEl = document.getElementById("transcript");
+
+let ws = null, captureCtx = null, playCtx = null, mediaStream = null;
+let playhead = 0, activeSources = [];
+let inCall = false;
+
+// Worklet: convierte el audio del micrófono a PCM16 16 kHz y lo postea en chunks.
+const WORKLET_SRC = `
+class PcmCapture extends AudioWorkletProcessor {
+  constructor() { super(); this.buf = []; this.bufLen = 0; }
+  process(inputs) {
+    const ch = inputs[0] && inputs[0][0];
+    if (!ch) return true;
+    this.buf.push(new Float32Array(ch)); this.bufLen += ch.length;
+    const chunk = Math.round(sampleRate * 0.02); // ~20 ms
+    while (this.bufLen >= chunk) {
+      const block = new Float32Array(chunk);
+      let off = 0;
+      while (off < chunk) {
+        const head = this.buf[0];
+        const take = Math.min(head.length, chunk - off);
+        block.set(head.subarray(0, take), off); off += take;
+        if (take === head.length) this.buf.shift();
+        else this.buf[0] = head.subarray(take);
+      }
+      this.bufLen -= chunk;
+      const ratio = sampleRate / ${INPUT_RATE};
+      const out = new Int16Array(Math.floor(chunk / ratio));
+      for (let i = 0; i < out.length; i++) {
+        const pos = i * ratio, i0 = Math.floor(pos), i1 = Math.min(i0 + 1, chunk - 1);
+        const s = block[i0] + (block[i1] - block[i0]) * (pos - i0);
+        out[i] = Math.max(-1, Math.min(1, s)) * 0x7fff;
+      }
+      this.port.postMessage(out.buffer, [out.buffer]);
+    }
+    return true;
+  }
+}
+registerProcessor("pcm-capture", PcmCapture);
+`;
+
+function addLine(role, text) {
+  const div = document.createElement("div");
+  div.className = "line " + (role === "user" ? "user" : "assistant");
+  div.innerHTML = `<span class="role">${role === "user" ? "Tú" : "Agente"}</span>`;
+  div.append(document.createTextNode(text));
+  transcriptEl.append(div);
+  div.scrollIntoView({ behavior: "smooth" });
+}
+
+function playPcm(arrayBuffer) {
+  const pcm = new Int16Array(arrayBuffer);
+  if (!pcm.length || !playCtx) return;
+  const floats = new Float32Array(pcm.length);
+  for (let i = 0; i < pcm.length; i++) floats[i] = pcm[i] / 0x8000;
+  const buffer = playCtx.createBuffer(1, floats.length, OUTPUT_RATE);
+  buffer.copyToChannel(floats, 0);
+  const src = playCtx.createBufferSource();
+  src.buffer = buffer;
+  src.connect(playCtx.destination);
+  playhead = Math.max(playhead, playCtx.currentTime);
+  src.start(playhead);
+  playhead += buffer.duration;
+  activeSources.push(src);
+  src.onended = () => { activeSources = activeSources.filter(s => s !== src); };
+}
+
+function flushPlayback() {
+  for (const src of activeSources) { try { src.stop(); } catch (_) {} }
+  activeSources = [];
+  playhead = playCtx ? playCtx.currentTime : 0;
+}
+
+async function startCall() {
+  statusEl.textContent = "Conectando…";
+  mediaStream = await navigator.mediaDevices.getUserMedia({
+    audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
+  });
+
+  const proto = location.protocol === "https:" ? "wss" : "ws";
+  ws = new WebSocket(`${proto}://${location.host}/ws/browser`);
+  ws.binaryType = "arraybuffer";
+  ws.onmessage = (e) => {
+    if (typeof e.data === "string") {
+      const msg = JSON.parse(e.data);
+      if (msg.type === "interruption") flushPlayback();
+      else if (msg.type === "transcript") addLine(msg.role, msg.text);
+    } else {
+      playPcm(e.data);
+    }
+  };
+  ws.onclose = () => { if (inCall) hangUp("Conexión cerrada"); };
+  await new Promise((ok, ko) => { ws.onopen = ok; ws.onerror = ko; });
+
+  playCtx = new AudioContext({ sampleRate: OUTPUT_RATE });
+  playhead = playCtx.currentTime;
+
+  captureCtx = new AudioContext();
+  const workletUrl = URL.createObjectURL(new Blob([WORKLET_SRC], { type: "application/javascript" }));
+  await captureCtx.audioWorklet.addModule(workletUrl);
+  const source = captureCtx.createMediaStreamSource(mediaStream);
+  const node = new AudioWorkletNode(captureCtx, "pcm-capture");
+  node.port.onmessage = (ev) => { if (ws && ws.readyState === 1) ws.send(ev.data); };
+  source.connect(node);
+
+  inCall = true;
+  callBtn.textContent = "Colgar";
+  callBtn.classList.add("hang");
+  statusEl.textContent = "En llamada — habla con el agente";
+}
+
+function hangUp(reason) {
+  inCall = false;
+  if (ws) { ws.onclose = null; try { ws.close(); } catch (_) {} ws = null; }
+  if (mediaStream) { mediaStream.getTracks().forEach(t => t.stop()); mediaStream = null; }
+  if (captureCtx) { captureCtx.close(); captureCtx = null; }
+  if (playCtx) { playCtx.close(); playCtx = null; }
+  activeSources = [];
+  callBtn.textContent = "Llamar";
+  callBtn.classList.remove("hang");
+  statusEl.textContent = reason || "Llamada finalizada";
+}
+
+callBtn.onclick = async () => {
+  callBtn.disabled = true;
+  try {
+    if (inCall) hangUp();
+    else await startCall();
+  } catch (err) {
+    hangUp("Error: " + (err.message || err));
+  } finally {
+    callBtn.disabled = false;
+  }
+};
+</script>
+</body>
+</html>

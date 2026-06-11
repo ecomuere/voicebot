@@ -1,0 +1,34 @@
+[project]
+name = "voicebot"
+version = "0.1.0"
+description = "Voicebot speech-to-speech (browser + teléfono) con Strands Agents y Amazon Nova Sonic"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "strands-agents[bidi]>=1.0.0",
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.29",
+    "numpy>=1.26",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8",
+    "pytest-asyncio>=0.23",
+]
+
+[project.scripts]
+voicebot-local = "voicebot.entrypoints.cli:run"
+voicebot-server = "voicebot.entrypoints.http.app:run"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/voicebot"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+pythonpath = ["src"]
