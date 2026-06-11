@@ -106,15 +106,22 @@ pip install -e ".[local]"   # añade PyAudio (requiere PortAudio del sistema)
 voicebot-local
 ```
 
-## Despliegue en AWS (Bedrock AgentCore Runtime)
+## Despliegue en AWS
 
-El servidor cumple el contrato de AgentCore Runtime con streaming bidireccional:
-contenedor linux/arm64 (`Dockerfile`), puerto 8080, health check `GET /ping` y
-WebSocket en `/ws`. La infraestructura (ECR + rol IAM + runtime) está definida
-con Terraform en [`infra/terraform`](infra/README.md), donde también se explica
-el flujo de despliegue, la autenticación SigV4/Cognito del navegador y las
-opciones para el canal telefónico (Twilio no puede firmar SigV4, así que ese
-canal va self-hosted o a través de un puente).
+La IaC (Terraform) está en [`infra/`](infra/README.md), organizada en stacks
+independientes que pueden convivir:
+
+- **EC2 + Twilio**: el contenedor en una instancia Graviton con TLS automático
+  (Caddy). Cubre navegador y teléfono con nuestro agente Strands. La opción más
+  directa para llamar por teléfono.
+- **AgentCore Runtime**: navegador gestionado por AWS (WebSocket bidireccional
+  con SigV4/Cognito). Twilio no puede firmar SigV4, así que el teléfono no se
+  conecta directo a este stack.
+- **Amazon Connect + Nova Sonic nativo**: teléfono sin servidores, pero la
+  lógica conversacional se configura en Connect (no usa el código de este repo).
+
+El contenedor (`Dockerfile`, linux/arm64, puerto 8080, `GET /ping`, WS en `/ws`)
+cumple el contrato de AgentCore y es el mismo para EC2.
 
 ## Tests
 

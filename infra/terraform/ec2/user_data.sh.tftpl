@@ -1,0 +1,26 @@
+#!/bin/bash
+set -euo pipefail
+
+dnf install -y docker
+systemctl enable --now docker
+
+aws ecr get-login-password --region ${region} \
+  | docker login --username AWS --password-stdin ${registry}
+
+docker network create voicebot || true
+
+# Aplicación (puerto interno 8080, solo accesible desde la red de docker)
+docker rm -f voicebot 2>/dev/null || true
+docker run -d --restart unless-stopped --name voicebot --network voicebot \
+  -e VOICEBOT_REGION=${bedrock_region} \
+  -e VOICEBOT_VOICE=${voice} \
+  -e VOICEBOT_MODEL_ID=${model_id} \
+  ${image_uri}
+
+# Caddy: TLS automático (Let's Encrypt) y proxy inverso con soporte WebSocket.
+# Requiere que el DNS de ${domain} apunte a la IP elástica de la instancia.
+docker rm -f caddy 2>/dev/null || true
+docker run -d --restart unless-stopped --name caddy --network voicebot \
+  -p 80:80 -p 443:443 \
+  -v caddy_data:/data -v caddy_config:/config \
+  caddy:2 caddy reverse-proxy --from ${domain} --to voicebot:8080

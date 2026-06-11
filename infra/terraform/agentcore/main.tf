@@ -7,16 +7,11 @@ locals {
 }
 
 # ---------------------------------------------------------------------------
-# Registro de contenedores
+# Registro de contenedores (creado por el stack ../ecr)
 # ---------------------------------------------------------------------------
 
-resource "aws_ecr_repository" "voicebot" {
-  name         = var.name
-  force_delete = true
-
-  image_scanning_configuration {
-    scan_on_push = true
-  }
+data "aws_ecr_repository" "voicebot" {
+  name = var.ecr_repository_name
 }
 
 # ---------------------------------------------------------------------------
@@ -72,7 +67,7 @@ resource "aws_iam_role_policy" "runtime" {
           "ecr:BatchGetImage",
           "ecr:GetDownloadUrlForLayer",
         ]
-        Resource = aws_ecr_repository.voicebot.arn
+        Resource = data.aws_ecr_repository.voicebot.arn
       },
       {
         Sid    = "Logs"
@@ -127,7 +122,7 @@ resource "aws_bedrockagentcore_agent_runtime" "voicebot" {
 
   agent_runtime_artifact {
     container_configuration {
-      container_uri = "${aws_ecr_repository.voicebot.repository_url}:${var.image_tag}"
+      container_uri = "${data.aws_ecr_repository.voicebot.repository_url}:${var.image_tag}"
     }
   }
 

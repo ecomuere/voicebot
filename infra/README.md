@@ -1,70 +1,72 @@
-# Infraestructura AWS (Bedrock AgentCore Runtime)
+# Infraestructura AWS
 
-Terraform que despliega el voicebot como **Bedrock AgentCore Runtime** con
-streaming bidireccional por WebSocket:
+IaC en Terraform organizada en stacks independientes — puedes aplicar solo los
+que necesites. Todos comparten el repositorio de imágenes del stack `ecr`.
 
-- Repositorio **ECR** para la imagen del contenedor.
-- **Rol IAM** de ejecución (invocar Nova Sonic, pull de ECR, logs, telemetría).
-- **AgentCore Runtime** (`aws_bedrockagentcore_agent_runtime`) con red pública
-  y protocolo `HTTP`, que publica `/invocations` (REST) y `/ws` (WebSocket).
+| Stack | Qué despliega | Canales que cubre |
+|---|---|---|
+| [`terraform/ecr`](terraform/ecr) | Repositorio ECR compartido | — (requisito de ec2 y agentcore) |
+| [`terraform/ec2`](terraform/ec2) | EC2 Graviton + Caddy (TLS automático) ejecutando el contenedor | 🌐 Navegador + ☎️ Teléfono (Twilio) con **nuestro agente Strands** |
+| [`terraform/agentcore`](terraform/agentcore) | Bedrock AgentCore Runtime (WebSocket bidireccional) | 🌐 Navegador (SigV4/Cognito). Teléfono no directo: Twilio no firma SigV4 |
+| [`terraform/connect`](terraform/connect) | Instancia de Amazon Connect + número | ☎️ Teléfono con **Nova Sonic nativo de Connect** (la lógica vive en Connect, no en este repo) |
 
-El contrato de servicio de AgentCore que cumple la app (`Dockerfile`):
-contenedor **linux/arm64**, puerto **8080**, health check **`GET /ping`** y
-WebSocket bidireccional en **`/ws`**.
+## Flujo común: construir y publicar la imagen
 
-## Despliegue
-
-Hay dependencia circular suave: el runtime necesita que la imagen exista en ECR.
-Por eso el primer `apply` se hace en dos pasos.
+Los stacks `ec2` y `agentcore` consumen la misma imagen (linux/arm64, puerto
+8080, `GET /ping`, WebSocket en `/ws`):
 
 ```bash
-cd infra/terraform
-terraform init
+cd infra/terraform/ecr
+terraform init && terraform apply
+REPO=$(terraform output -raw repository_url)
 
-# 1. Crear solo el repositorio ECR
-terraform apply -target=aws_ecr_repository.voicebot
-
-# 2. Construir y subir la imagen (arm64) desde la raíz del repo
-REPO=$(terraform output -raw ecr_repository_url)
+# desde la raíz del repo
 aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin "${REPO%%/*}"
-docker buildx build --platform linux/arm64 -t "$REPO:latest" --push ../..
-
-# 3. Crear el resto (rol IAM + runtime)
-terraform apply
+docker buildx build --platform linux/arm64 -t "$REPO:latest" --push .
 ```
 
-Para actualizar el agente: vuelve a construir/subir la imagen y ejecuta
-`terraform apply` (o fuerza una nueva versión del runtime cambiando `image_tag`).
+## Opción A — EC2 + Twilio (la más directa para teléfono)
 
-## Conectarse al runtime
+```bash
+cd infra/terraform/ec2
+terraform init
+terraform apply -var domain=voicebot.midominio.com
+```
 
-El endpoint WebSocket (output `websocket_url`) está protegido con **IAM SigV4**:
-cada conexión debe ir firmada con credenciales AWS.
+1. Crea un registro DNS **A** de tu dominio apuntando al output `public_ip`
+   (Caddy emite el certificado TLS solo cuando el DNS resuelve).
+2. Navegador: abre el output `web_url`.
+3. Teléfono: en Twilio, configura el webhook de voz de tu número con el output
+   `twilio_voice_webhook` (POST). No hay SSH; para entrar en la instancia:
+   `aws ssm start-session --target <instance_id>`.
 
-- **Navegador**: el patrón recomendado de AWS es Cognito (User Pool + Identity
-  Pool) para obtener credenciales temporales en el cliente y firmar la conexión
-  WebSocket, como en el ejemplo oficial
-  [sample-nova-sonic-websocket-agentcore](https://github.com/aws-samples/sample-nova-sonic-websocket-agentcore).
-  Alternativa: `authorizer_configuration` con JWT (custom_jwt_authorizer).
-- **Pruebas rápidas**: un cliente Python/Node con tus credenciales locales
-  firmando SigV4 contra `websocket_url`.
+## Opción B — AgentCore Runtime (navegador gestionado por AWS)
 
-### ⚠️ Telefonía (Twilio) y AgentCore
+```bash
+cd infra/terraform/agentcore
+terraform init && terraform apply
+```
 
-Twilio Media Streams **no puede firmar SigV4 ni adjuntar JWT** en la conexión
-WebSocket, así que no puede conectarse directamente al runtime. Opciones:
+El endpoint WebSocket (output `websocket_url`) exige **SigV4**: el navegador
+necesita credenciales temporales (Cognito User Pool + Identity Pool, como en el
+[ejemplo oficial](https://github.com/aws-samples/sample-nova-sonic-websocket-agentcore))
+o un `custom_jwt_authorizer`.
 
-1. **Híbrido (recomendado para empezar)**: el canal de navegador en AgentCore y
-   el canal telefónico self-hosted (el mismo contenedor en ECS Fargate/EC2
-   detrás de un ALB, o con ngrok en desarrollo). Es el mismo código.
-2. **Puente**: un pequeño proxy público (Fargate/API Gateway) que acepte el
-   WebSocket de Twilio y reenvíe el audio al runtime firmando SigV4.
-3. **Amazon Connect** en lugar de Twilio, que se integra de forma nativa con
-   servicios AWS.
+⚠️ **Twilio no puede conectarse directamente a AgentCore** (Media Streams no
+firma SigV4 ni envía JWT). Para teléfono con nuestro agente usa la opción A, o
+construye un puente proxy que firme SigV4.
 
-## Límites a tener en cuenta
+## Opción C — Amazon Connect + Nova Sonic nativo
 
-- Sesiones de AgentCore Runtime: hasta 8 h de duración y ~15 min de inactividad.
-- Nova Sonic está disponible en `us-east-1`, `eu-north-1` y `ap-northeast-1`.
-- Los recursos `bedrockagentcore_*` requieren una versión reciente del provider
-  AWS de Terraform (v6+, 2026).
+Teléfono sin operar servidores, pero con el agente de IA **de Connect** (la
+lógica conversacional se configura en la consola de Connect, no en este repo).
+Ver [`terraform/connect/README.md`](terraform/connect/README.md).
+
+## Límites y notas
+
+- Nova Sonic (Bedrock): `us-east-1`, `eu-north-1`, `ap-northeast-1`.
+  Nova Sonic en Connect: `us-east-1`, `us-west-2`.
+- Sesiones de AgentCore Runtime: hasta 8 h, ~15 min de inactividad.
+- Los recursos `bedrockagentcore_*` requieren un provider AWS reciente (v6+, 2026).
+- Twilio exige `https://`/`wss://` con certificado válido: en EC2 lo resuelve
+  Caddy con Let's Encrypt; en local usa `ngrok http 8000`.

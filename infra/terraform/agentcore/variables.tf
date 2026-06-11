@@ -10,6 +10,12 @@ variable "region" {
   default     = "us-east-1"
 }
 
+variable "ecr_repository_name" {
+  description = "Nombre del repositorio ECR (creado por el stack ../ecr)"
+  type        = string
+  default     = "voicebot"
+}
+
 variable "image_tag" {
   description = "Tag de la imagen del contenedor en ECR"
   type        = string

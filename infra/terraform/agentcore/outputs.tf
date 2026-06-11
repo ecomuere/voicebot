@@ -1,6 +1,6 @@
 output "ecr_repository_url" {
   description = "URI del repositorio ECR donde subir la imagen"
-  value       = aws_ecr_repository.voicebot.repository_url
+  value       = data.aws_ecr_repository.voicebot.repository_url
 }
 
 output "agent_runtime_arn" {
