@@ -36,7 +36,9 @@ src/voicebot/
 ├── bootstrap.py             # Composition root (único punto de cableado)
 └── config.py                # Settings desde variables de entorno
 
-infra/terraform/             # IaC: despliegue en Bedrock AgentCore Runtime
+lambdas/                     # Herramientas de negocio compartidas (ADR 0002)
+infra/terraform/             # IaC por stacks: ecr, ec2, agentcore, connect, tools
+docs/adr/                    # Decisiones de arquitectura (ADRs)
 ```
 
 Principios aplicados:
