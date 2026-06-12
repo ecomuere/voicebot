@@ -6,3 +6,11 @@ venv/
 dist/
 build/
 .env
+
+# Terraform
+.terraform/
+.terraform.lock.hcl
+*.tfstate
+*.tfstate.*
+*.tfvars
+infra/terraform/**/.build/

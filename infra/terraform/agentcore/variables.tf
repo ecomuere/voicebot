@@ -22,6 +22,12 @@ variable "image_tag" {
   default     = "latest"
 }
 
+variable "order_status_function_name" {
+  description = "Nombre de la Lambda de pedidos (output del stack ../tools); vacío para desactivar la tool"
+  type        = string
+  default     = ""
+}
+
 variable "voice" {
   description = "Voz de Nova Sonic (VOICEBOT_VOICE)"
   type        = string

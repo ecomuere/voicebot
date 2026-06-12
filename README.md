@@ -139,8 +139,13 @@ por dobles (`tests/fakes.py`). Cubren el caso de uso de conversación, el códec
 
 ## Extender
 
-- **Herramientas**: añade funciones `@tool` en `adapters/tools.py` (CRM, reservas,
-  consultas a base de datos...) y regístralas en `strands_gateway.py`.
+- **Herramientas de negocio** ([ADR 0002](docs/adr/0002-herramientas-de-negocio-compartidas-como-lambdas.md)):
+  la regla de negocio vive una sola vez como Lambda en `lambdas/<capacidad>/`
+  (ver `lambdas/order_status`), desplegada por `infra/terraform/tools` e
+  invocada por ambos canales: el AI agent de Connect (teléfono) y una tool fina
+  `@tool` en `adapters/tools.py` registrada en `strands_gateway.py` (web).
+- **Herramientas locales simples**: funciones `@tool` directas en
+  `adapters/tools.py` cuando no necesiten compartirse con Connect.
 - **Nuevo canal** (WebRTC, Amazon Connect, Telegram...): implementa `CallTransport`
   y cablea el endpoint en `entrypoints/`.
 - **Otro modelo speech-to-speech**: implementa `ConversationGateway` (Strands también

@@ -2,6 +2,11 @@ output "connect_instance_id" {
   value = aws_connect_instance.voicebot.id
 }
 
+output "connect_instance_arn" {
+  description = "Pásalo como connect_instance_arn al stack ../tools para asociar las Lambdas"
+  value       = aws_connect_instance.voicebot.arn
+}
+
 output "phone_number" {
   description = "Número de teléfono reclamado (asócialo al contact flow en la consola)"
   value       = aws_connect_phone_number.voicebot.phone_number

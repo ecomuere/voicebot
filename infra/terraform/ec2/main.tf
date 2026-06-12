@@ -116,6 +116,12 @@ resource "aws_iam_role_policy" "instance" {
         ]
         Resource = data.aws_ecr_repository.voicebot.arn
       },
+      {
+        Sid      = "InvokeSharedTools"
+        Effect   = "Allow"
+        Action   = ["lambda:InvokeFunction"]
+        Resource = "arn:aws:lambda:${var.region}:${data.aws_caller_identity.current.account_id}:function:${var.name}-*"
+      },
     ]
   })
 }
@@ -137,13 +143,14 @@ resource "aws_instance" "voicebot" {
   iam_instance_profile   = aws_iam_instance_profile.instance.name
 
   user_data = templatefile("${path.module}/user_data.sh.tftpl", {
-    region         = var.region
-    registry       = split("/", data.aws_ecr_repository.voicebot.repository_url)[0]
-    image_uri      = local.image_uri
-    domain         = var.domain
-    bedrock_region = var.bedrock_region
-    voice          = var.voice
-    model_id       = var.model_id
+    region                = var.region
+    registry              = split("/", data.aws_ecr_repository.voicebot.repository_url)[0]
+    image_uri             = local.image_uri
+    domain                = var.domain
+    bedrock_region        = var.bedrock_region
+    voice                 = var.voice
+    model_id              = var.model_id
+    order_status_function = var.order_status_function_name
   })
   user_data_replace_on_change = true
 

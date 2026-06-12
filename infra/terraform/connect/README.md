@@ -37,6 +37,11 @@ terraform apply \
 3. Define el **AI agent** (instrucciones del sistema, acciones). Incluye en sus
    instrucciones cuándo debe escalar (p. ej. "si el cliente pide hablar con una
    persona o no puedes resolver su gestión, transfiere la llamada").
+   - **Herramientas de negocio** ([ADR 0002](../../../docs/adr/0002-herramientas-de-negocio-compartidas-como-lambdas.md)):
+     aplica el stack `../tools` con `connect_instance_arn` (output de este
+     stack) para asociar las Lambdas compartidas a la instancia, y añade en el
+     AI agent una acción que invoque `voicebot-order-status` con el parámetro
+     `order_id`. Así el bot del teléfono y el del navegador responden igual.
 4. Cablea el **escalado** en el flujo: a la salida de escalado del AI agent,
    añade `Set working queue` → cola **`escalado-humano`** (output
    `escalation_queue_name`) → `Transfer to queue`. Añade una rama para fuera de

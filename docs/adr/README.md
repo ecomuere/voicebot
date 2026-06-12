@@ -7,3 +7,4 @@ con un nuevo ADR que la reemplace.
 | # | Título | Estado |
 |---|--------|--------|
 | [0001](0001-telefonia-con-amazon-connect-nativo.md) | Canal telefónico con Amazon Connect nativo y escalado a agente humano | Aceptada |
+| [0002](0002-herramientas-de-negocio-compartidas-como-lambdas.md) | Herramientas de negocio compartidas como Lambdas | Aceptada |

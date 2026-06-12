@@ -1,0 +1,24 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # Dependencias mínimas de los tests: los unitarios no necesitan AWS,
+      # audio ni red (strands se instala para cubrir las tools del agente).
+      - name: Install dependencies
+        run: pip install numpy fastapi httpx "strands-agents>=1.0.0" pytest pytest-asyncio
+
+      - name: Run tests
+        run: pytest -q

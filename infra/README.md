@@ -9,6 +9,11 @@ que necesites. Todos comparten el repositorio de imágenes del stack `ecr`.
 | [`terraform/ec2`](terraform/ec2) | EC2 Graviton + Caddy (TLS automático) ejecutando el contenedor | 🌐 Navegador + ☎️ Teléfono (Twilio) con **nuestro agente Strands** |
 | [`terraform/agentcore`](terraform/agentcore) | Bedrock AgentCore Runtime (WebSocket bidireccional) | 🌐 Navegador (SigV4/Cognito). Teléfono no directo: Twilio no firma SigV4 |
 | [`terraform/connect`](terraform/connect) | Instancia de Connect + número + cola de escalado, routing profile y horario | ☎️ Teléfono con **Nova Sonic nativo de Connect** y escalado a agente humano ([ADR 0001](../docs/adr/0001-telefonia-con-amazon-connect-nativo.md)) |
+| [`terraform/tools`](terraform/tools) | Lambdas de negocio compartidas (p. ej. estado de pedidos) | Invocadas por ambos cerebros ([ADR 0002](../docs/adr/0002-herramientas-de-negocio-compartidas-como-lambdas.md)) |
+
+Orden recomendado: `ecr` → `tools` → (`ec2` y/o `agentcore`, pasando
+`order_status_function_name`) → `connect` (y re-aplicar `tools` con
+`connect_instance_arn` para asociar las Lambdas a la instancia).
 
 ## Flujo común: construir y publicar la imagen
 

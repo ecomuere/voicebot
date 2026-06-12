@@ -70,6 +70,12 @@ resource "aws_iam_role_policy" "runtime" {
         Resource = data.aws_ecr_repository.voicebot.arn
       },
       {
+        Sid      = "InvokeSharedTools"
+        Effect   = "Allow"
+        Action   = ["lambda:InvokeFunction"]
+        Resource = "arn:aws:lambda:${var.region}:${local.account_id}:function:${var.name}-*"
+      },
+      {
         Sid    = "Logs"
         Effect = "Allow"
         Action = [
@@ -135,9 +141,10 @@ resource "aws_bedrockagentcore_agent_runtime" "voicebot" {
   }
 
   environment_variables = {
-    VOICEBOT_REGION   = var.region
-    VOICEBOT_VOICE    = var.voice
-    VOICEBOT_MODEL_ID = var.model_id
+    VOICEBOT_REGION                = var.region
+    VOICEBOT_VOICE                 = var.voice
+    VOICEBOT_MODEL_ID              = var.model_id
+    VOICEBOT_ORDER_STATUS_FUNCTION = var.order_status_function_name
   }
 
   depends_on = [aws_iam_role_policy.runtime]

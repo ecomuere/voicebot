@@ -15,6 +15,7 @@ docker run -d --restart unless-stopped --name voicebot --network voicebot \
   -e VOICEBOT_REGION=${bedrock_region} \
   -e VOICEBOT_VOICE=${voice} \
   -e VOICEBOT_MODEL_ID=${model_id} \
+  -e VOICEBOT_ORDER_STATUS_FUNCTION=${order_status_function} \
   ${image_uri}
 
 # Caddy: TLS automático (Let's Encrypt) y proxy inverso con soporte WebSocket.

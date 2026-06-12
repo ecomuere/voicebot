@@ -14,7 +14,7 @@ from strands.experimental.bidi.tools import stop_conversation
 from strands.experimental.bidi.types.events import BidiAudioInputEvent
 
 from voicebot.adapters.strands_events import map_event
-from voicebot.adapters.tools import get_current_time, get_weather
+from voicebot.adapters.tools import get_current_time, get_order_status, get_weather
 from voicebot.config import Settings
 from voicebot.domain.audio import AudioFrame
 from voicebot.domain.events import ConversationEvent
@@ -59,7 +59,7 @@ class StrandsConversationGateway:
             model=model,
             system_prompt=self._settings.system_prompt,
             # stop_conversation permite al usuario terminar la sesión con la voz.
-            tools=[get_current_time, get_weather, stop_conversation],
+            tools=[get_current_time, get_order_status, get_weather, stop_conversation],
         )
 
     @asynccontextmanager
