@@ -1,5 +1,9 @@
 # Canal telefónico con Amazon Connect + Nova Sonic (nativo)
 
+> Esta es la opción elegida para el canal telefónico de producción, con
+> escalado a agente humano — ver
+> [ADR 0001](../../../docs/adr/0001-telefonia-con-amazon-connect-nativo.md).
+
 Esta opción **no usa el contenedor Strands del repo**: desde re:Invent 2025,
 Amazon Connect integra Nova Sonic de forma nativa en sus contact flows
 ("agentic self-service"). La conversación speech-to-speech la gestiona el

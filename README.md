@@ -108,6 +108,10 @@ voicebot-local
 
 ## Despliegue en AWS
 
+> 📌 Decisión de arquitectura: el canal telefónico de producción usa **Amazon
+> Connect nativo** con escalado a agente humano — ver
+> [ADR 0001](docs/adr/0001-telefonia-con-amazon-connect-nativo.md).
+
 La IaC (Terraform) está en [`infra/`](infra/README.md), organizada en stacks
 independientes que pueden convivir:
 
