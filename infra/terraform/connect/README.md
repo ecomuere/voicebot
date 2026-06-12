@@ -1,40 +1,56 @@
-# Canal telefónico con Amazon Connect + Nova Sonic (nativo)
+# Canal telefónico: Amazon Connect + Nova Sonic con escalado a humano
 
-> Esta es la opción elegida para el canal telefónico de producción, con
-> escalado a agente humano — ver
+> Opción elegida para el canal telefónico de producción — ver
 > [ADR 0001](../../../docs/adr/0001-telefonia-con-amazon-connect-nativo.md).
 
-Esta opción **no usa el contenedor Strands del repo**: desde re:Invent 2025,
-Amazon Connect integra Nova Sonic de forma nativa en sus contact flows
-("agentic self-service"). La conversación speech-to-speech la gestiona el
-agente de IA de Connect, configurado en la consola de Connect.
+La llamada comienza atendida por el **AI agent nativo de Connect** (Nova Sonic,
+speech-to-speech, español soportado) y, cuando el llamante lo pide o el bot lo
+decide, **escala a una cola de agentes humanos** con resumen automático de la
+conversación. La lógica conversacional se configura en Connect, no en el
+contenedor Strands de este repo (ese sirve el canal web).
 
-- ✅ Sin servidor que operar, número incluido, integración 100 % AWS.
-- ⚠️ La lógica del agente (prompt, herramientas) se define en Connect, no en
-  este repo. Disponible en `us-east-1` y `us-west-2`; español soportado.
-- ⚠️ Si quieres que sea **nuestro** agente Strands quien atienda llamadas de
-  Connect, haría falta un adaptador de media streaming (Kinesis Video
-  Streams) que no está implementado — usa la opción EC2 + Twilio para eso.
+## Qué crea Terraform
 
-## Despliegue
+- Instancia de Connect (`CONNECT_MANAGED`) y número entrante (DID).
+- **Horario de soporte** (`aws_connect_hours_of_operation`): L-V, franja
+  configurable (`business_hours`, zona `time_zone`).
+- **Cola `escalado-humano`** (`aws_connect_queue`): destino de la transferencia.
+- **Routing profile `agentes-humanos`** vinculado a esa cola.
+- Opcional: un **usuario agente** de ejemplo (softphone) si defines
+  `agent_username` + `agent_password`.
 
 ```bash
 terraform init
-terraform apply
+terraform apply \
+  -var agent_username=agente1 \
+  -var 'agent_password=CambiaEsto1!'   # opcional; omite ambos para no crear usuario
 ```
-
-Crea la instancia de Connect y reclama un número (output `phone_number`).
 
 ## Configuración en consola (no soportada aún por Terraform)
 
-1. Entra en la consola de Connect (output `console_url`) y crea un usuario admin.
-2. Crea un **contact flow** de entrada y añade un bloque de conversación con IA:
-   en *Speech model* elige **Speech-to-Speech** → proveedor **Amazon Nova Sonic**,
-   activa **Enable AI Agent** y selecciona una voz compatible (hay voces en español).
-3. Define el AI agent (instrucciones del sistema, acciones/herramientas).
-4. Asocia el número reclamado al contact flow (Channels → Phone numbers).
-5. Llama al número.
+1. Entra en la consola de Connect (output `console_url`) y crea el usuario admin
+   inicial.
+2. Crea un **contact flow** de entrada con el bloque de conversación IA:
+   - *Speech model* → **Speech-to-Speech** → proveedor **Amazon Nova Sonic**.
+   - Activa **Enable AI Agent** y selecciona una voz compatible (hay voces en
+     español).
+3. Define el **AI agent** (instrucciones del sistema, acciones). Incluye en sus
+   instrucciones cuándo debe escalar (p. ej. "si el cliente pide hablar con una
+   persona o no puedes resolver su gestión, transfiere la llamada").
+4. Cablea el **escalado** en el flujo: a la salida de escalado del AI agent,
+   añade `Set working queue` → cola **`escalado-humano`** (output
+   `escalation_queue_name`) → `Transfer to queue`. Añade una rama para fuera de
+   horario/cola llena (mensaje + colgar o buzón).
+5. Asocia el número reclamado (output `phone_number`) al contact flow
+   (*Channels → Phone numbers*).
+6. Agentes humanos: asígnales el routing profile **`agentes-humanos`**; reciben
+   las llamadas en el **Agent Workspace** con el resumen de la conversación del
+   bot.
+7. Llama al número y pide "quiero hablar con una persona" para probar el
+   traspaso completo.
 
-Referencias:
+## Referencias
+
+- [Use agentic self-service (Connect admin guide)](https://docs.aws.amazon.com/connect/latest/adminguide/agentic-self-service.html)
 - [Configure Amazon Nova Sonic Speech-to-Speech (Connect admin guide)](https://docs.aws.amazon.com/connect/latest/adminguide/nova-sonic-speech-to-speech.html)
 - [Amazon Connect agentic self-service (anuncio)](https://aws.amazon.com/about-aws/whats-new/2025/11/amazon-connect-agentic-self-service/)

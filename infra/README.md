@@ -8,7 +8,7 @@ que necesites. Todos comparten el repositorio de imágenes del stack `ecr`.
 | [`terraform/ecr`](terraform/ecr) | Repositorio ECR compartido | — (requisito de ec2 y agentcore) |
 | [`terraform/ec2`](terraform/ec2) | EC2 Graviton + Caddy (TLS automático) ejecutando el contenedor | 🌐 Navegador + ☎️ Teléfono (Twilio) con **nuestro agente Strands** |
 | [`terraform/agentcore`](terraform/agentcore) | Bedrock AgentCore Runtime (WebSocket bidireccional) | 🌐 Navegador (SigV4/Cognito). Teléfono no directo: Twilio no firma SigV4 |
-| [`terraform/connect`](terraform/connect) | Instancia de Amazon Connect + número | ☎️ Teléfono con **Nova Sonic nativo de Connect** (la lógica vive en Connect, no en este repo) |
+| [`terraform/connect`](terraform/connect) | Instancia de Connect + número + cola de escalado, routing profile y horario | ☎️ Teléfono con **Nova Sonic nativo de Connect** y escalado a agente humano ([ADR 0001](../docs/adr/0001-telefonia-con-amazon-connect-nativo.md)) |
 
 ## Flujo común: construir y publicar la imagen
 
